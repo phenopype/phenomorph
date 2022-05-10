@@ -121,7 +121,7 @@ class GenericModel(object):
                 f"Train/Test split generated. Train dataset has {len(train_set['im'])} images, while Test dataset has {len(test_set['im'])} images"
             )
 
-    def load_config(self, cfgpath):
+    def load_config(self, cfgpath, verbose=True):
         cfg = pp_utils_lowlevel._load_yaml(cfgpath)
         options = dlib.shape_predictor_training_options()
         options.num_trees_per_cascade_level = cfg["train"]["num_trees"]
@@ -134,7 +134,9 @@ class GenericModel(object):
         options.oversampling_amount = cfg["train"]["oversampling"]
         options.be_verbose = cfg["train"]["verbose"]
         self.options = options
-        return print(f"Loaded ml-morph config file: {cfgpath}")
+        
+        if verbose:
+            return print(f"Loaded ml-morph config file: {cfgpath}")
 
 
     def train_model(self, tag, overwrite=False):
@@ -456,7 +458,7 @@ class PhenopypeModel(GenericModel):
                         ## flipping
                         if parameter["flip"]:
                                                     
-                            image = utils.load_image(dirpath)                       
+                            image = pp_utils.load_image(dirpath)                       
                             image = cv2.flip(image, 1)
                             if not rx == 1:
                                 rx = image_width - (rx + rw)
@@ -471,8 +473,8 @@ class PhenopypeModel(GenericModel):
                         ## saving
                         if parameter["mode"] == "save":
                             if image.__class__.__name__ == "NoneType":
-                                image = utils.load_image(dirpath)                       
-                            utils.save_image(image, dir_path=self.imagedir, file_name=filename)
+                                image = pp_utils.load_image(dirpath)                       
+                            pp_utils.save_image(image, dir_path=self.imagedir, file_name=filename)
                             filepath = os.path.relpath(os.path.join(self.imagedir,filename), self.xmldir)
                             
                         ## xml part
@@ -526,8 +528,6 @@ class PhenopypeModel(GenericModel):
             print("Prepared datasets for \"{}\" from project \"{}\":".format(tag, project_name))
             print("total available: {} images - training: {} images - testing: {} images".format(n_total, n_train_imgs, n_test_imgs))
                 
-                
-
     def create_config(
             self,
             tag,
@@ -536,15 +536,13 @@ class PhenopypeModel(GenericModel):
             ):
 
         if os.path.isfile(configpath):
-
             self.configpath = os.path.join(self.configdir, "config_{}.yaml".format(tag))
-
             if not os.path.isfile(self.configpath):
                 shutil.copyfile(configpath, self.configpath)
-                self.model.load_config(self.configpath)
+                super().load_config(self.configpath)
                 print("- saved a copy at {}".format(self.configpath))
             else:
-                self.model.load_config(self.configpath)
+                super().load_config(self.configpath, verbose=False)
                 print("- found config file at {} - loading (overwrite=False)".format(self.configpath))               
         else:
             print("- {} does not exist!".format(configpath))
@@ -553,7 +551,7 @@ class PhenopypeModel(GenericModel):
     def train_model(self, tag, overwrite=False):
 
         ## load config to update recent changes
-        self.model.load_config(self.configpath)
+        super().load_config(self.configpath)
 
         print("- training using the following options:\n")
         config = pp_utils_lowlevel._load_yaml(self.configpath)
