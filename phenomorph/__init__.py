@@ -1,2 +1,3 @@
 from ._version import __version__
-from .model import Model
+
+from .main import PhenopypeModel, GenericModel

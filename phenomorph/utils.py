@@ -291,3 +291,14 @@ def dlib_xml_to_pandas(xml_file: str, print_csv = False):
     return df
 
 
+def xml_element_counter(xml_path, element_name, project=None):
+    tree, idx = ET.parse(xml_path), 0
+    for elem in tree.iter():
+        if elem.tag == element_name:
+            if project:
+                if os.path.basename(elem.attrib["file"]) in project.file_names:
+                    pass
+                else:
+                    continue
+            idx += 1
+    return idx
