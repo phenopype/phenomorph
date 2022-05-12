@@ -28,6 +28,23 @@ class GenericModel(object):
             tag=None, 
             overwrite=False
             ):
+        """
+        
+
+        Parameters
+        ----------
+        rootdir : TYPE
+            DESCRIPTION.
+        tag : TYPE, optional
+            DESCRIPTION. The default is None.
+        overwrite : TYPE, optional
+            DESCRIPTION. The default is False.
+
+        Returns
+        -------
+        None.
+
+        """
         
         ## init at root
         self.rootdir = os.path.abspath(rootdir)
@@ -58,11 +75,10 @@ class GenericModel(object):
                 print("- loaded model \"predictor_{}.dat\"".format(tag))
           
 
-    def prepare_training_data(
+    def create_training_data(
             self, 
             tag, 
             imagedir=None,
-            mode="link",
             csvpath=None,
             overwrite=False, 
             percentage=0.8,
@@ -77,21 +93,9 @@ class GenericModel(object):
                 for filename in os.listdir(imagedir):
                     filepathList.append(os.path.join(imagedir, filename))
     
-        # if mode == "link":
-            
-    
-        # elif mode == "copy":
-            
-    
-        #         if not os.path.isfile(self.csvpath):
-        #             shutil.copyfile(csvpath, self.csvpath)
-        #             print("- saved a copy of csv file at {}".format(self.csvpath))
-        #         else:
-        #             print("- {} does not exist!".format(csvpath))
-        #             return
-
 
         if os.path.isfile(csvpath):
+            
             self.csvpath = os.path.join(self.rootdir, f"landmarks_ml-morph_{tag}.csv")
 
             if not os.path.isfile(self.csvpath):
@@ -103,8 +107,15 @@ class GenericModel(object):
 
         csv = utils.read_csv(self.csvpath)
         
+        train_root, train_image_e = utils.init_xml_elements()
+        test_root, test_image_e = utils.init_xml_elements()
+
         
-        
+        # for filepath in filepathList:
+
+        #     images_e.append(add_image_element(utils_lowlevel._convert_tup_list_arr(data)[0], (rx, ry, rw, rh), path=filepath))
+    
+
         
         train_set, test_set = utils.split_train_test(csv, percentage)
         train_xml = os.path.join(self.xmldir, f"train_{tag}.xml")
@@ -121,8 +132,29 @@ class GenericModel(object):
                 f"Train/Test split generated. Train dataset has {len(train_set['im'])} images, while Test dataset has {len(test_set['im'])} images"
             )
 
-    def load_config(self, cfgpath, verbose=True):
-        cfg = pp_utils_lowlevel._load_yaml(cfgpath)
+    def load_config(
+            self, 
+            configpath, 
+            verbose=True
+            ):
+        """
+        
+
+        Parameters
+        ----------
+        configpath : TYPE
+            DESCRIPTION.
+        verbose : TYPE, optional
+            DESCRIPTION. The default is True.
+
+        Returns
+        -------
+        TYPE
+            DESCRIPTION.
+
+        """
+        
+        cfg = pp_utils_lowlevel._load_yaml(configpath)
         options = dlib.shape_predictor_training_options()
         options.num_trees_per_cascade_level = cfg["train"]["num_trees"]
         options.nu = cfg["train"]["regularization"]
@@ -136,7 +168,7 @@ class GenericModel(object):
         self.options = options
         
         if verbose:
-            return print(f"Loaded ml-morph config file: {cfgpath}")
+            return print(f"Loaded ml-morph config file: {configpath}")
 
 
     def train_model(self, tag, overwrite=False):
