@@ -78,26 +78,80 @@ class GenericModel(object):
     def create_training_data(
             self, 
             tag, 
-            imagedir=None,
-            csvpath=None,
-            overwrite=False, 
+            imagedir,
+            csvpath,
+            bboxes=None,
+            parameters=None,
+            random_seed=42,
             percentage=0.8,
+            flip=False,
+            prop_train=None,
+            prop_test=None,
+            n_train=None,
+            n_test=None,
+            overwrite=False, 
             **kwargs
             ):
         
         
+        # if not kwargs.get("filepathList"):
+        #     filepathList = []
         
-        if not kwargs.get("filepathList"):
-            filepathList = []
-            if os.path.isdir(imagedir):
-                for filename in os.listdir(imagedir):
-                    filepathList.append(os.path.join(imagedir, filename))
+        ## basic checks        
+        if not imagedir.__class__.__name__ == "list":
+            imagedir = [imagedir]
+        imagedirs = imagedir
+        if not csvpath.__class__.__name__ == "list":
+            csvpath = [csvpath]
+        csvpaths = csvpath
+        if not bboxes.__class__.__name__ == "NoneType":
+            if not bboxes.__class__.__name__ == "list":
+                bboxes = [bboxes]
+        else: 
+            bboxes =  [None] * len(imagedir)
+        if not len(imagedirs) == len(csvpaths) == len(bboxes):
+            print("imagedir and csvpath have different length")
+            return
+                
+        ## parameter checks
+        parameter_checks = {
+            "percentage": percentage,
+            "flip": flip,
+            "prop_train":prop_train,
+            "prop_test":prop_test,
+            "n_train":n_train,
+            "n_test":n_test,
+            }
+        if parameters.__class__.__name__ == "NoneType":
+            parameters = {}
+        for imagedir in imagedirs:
+            dirname = os.path.basename(imagedir)
+            if not dirname in parameters:
+                parameters[dirname] = {}
+            for parameter_name, parameter_value in parameter_checks.items():
+                if not parameter_name in parameters[dirname].keys():
+                    parameters[dirname][parameter_name] = parameter_value        
+        
+        
+        ## init xml files
+        train_root, train_image_e = utils.init_xml_elements()
+        test_root, test_image_e = utils.init_xml_elements()        
     
-
-        if os.path.isfile(csvpath):
+        ## loop over datasets
+        for imagedir, csvpath, bbox in zip(imagedirs, csvpaths, bboxes):
             
-            self.csvpath = os.path.join(self.rootdir, f"landmarks_ml-morph_{tag}.csv")
+            if not os.path.isdir(imagedir):
+                print("Invalid image dir")
+                return
+            if not os.path.isdir(csvpath):
+                print("Invalid csv path")
+                return
+            
+            
+            dirname = os.path.basename(imagedir)
+            
 
+        
             if not os.path.isfile(self.csvpath):
                 shutil.copyfile(csvpath, self.csvpath)
                 print("- saved a copy of csv file at {}".format(self.csvpath))
@@ -107,11 +161,11 @@ class GenericModel(object):
 
         csv = utils.read_csv(self.csvpath)
         
-        train_root, train_image_e = utils.init_xml_elements()
-        test_root, test_image_e = utils.init_xml_elements()
 
-        
-        # for filepath in filepathList:
+            datasets[filepathList], 
+            landmarkList, 
+            bboxList, 
+            percentageList:
 
         #     images_e.append(add_image_element(utils_lowlevel._convert_tup_list_arr(data)[0], (rx, ry, rw, rh), path=filepath))
     
@@ -131,6 +185,8 @@ class GenericModel(object):
             print(
                 f"Train/Test split generated. Train dataset has {len(train_set['im'])} images, while Test dataset has {len(test_set['im'])} images"
             )
+            
+            
 
     def load_config(
             self, 
