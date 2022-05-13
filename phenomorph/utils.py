@@ -100,10 +100,14 @@ def add_bbox_element(bbox,imgtuple):
     '''
     
     box = ET.Element('box')
-    height = imgtuple[0] - 2
-    width = imgtuple[1] - 2
-    top = 1
-    left = 1
+    
+    if len(imgtuple) == 2:
+        height = imgtuple[0] - 2
+        width = imgtuple[1] - 2
+        top = 1
+        left = 1
+    elif len(imgtuple) == 4:
+        left, top, width, height = imgtuple
 
     box.set('top', str(int(top)))
     box.set('left', str(int(left)))
@@ -291,14 +295,33 @@ def dlib_xml_to_pandas(xml_file: str, print_csv = False):
     return df
 
 
-def xml_element_counter(xml_path, element_name, project=None):
-    tree, idx = ET.parse(xml_path), 0
+def xml_element_counter(xmlPath, elementName, imageList=None):
+    tree, idx = ET.parse(xmlPath), 0
     for elem in tree.iter():
-        if elem.tag == element_name:
-            if project:
-                if os.path.basename(elem.attrib["file"]) in project.file_names:
+        if elem.tag == elementName:
+            if imageList:
+                if os.path.basename(elem.attrib["file"]) in imageList:
                     pass
                 else:
                     continue
             idx += 1
     return idx
+
+
+
+def init_xml_elements(n=1):
+    
+    ret = []
+    
+    for i in range(0, n):
+        root = ET.Element('dataset')
+        root.append(ET.Element('name'))
+        root.append(ET.Element('comment'))
+        images_e = ET.Element('images')
+        root.append(images_e)
+        ret.append(root)
+        
+    if len(ret) == 1:
+        ret = ret[0]
+    
+    return ret
