@@ -78,39 +78,47 @@ class GenericModel(object):
     def create_training_data(
             self, 
             tag, 
-            imagedir,
-            csvpath,
+            
+            images,
+            landmarks,
             bboxes=None,
             parameters=None,
+            
             random_seed=42,
+            
             percentage=0.8,
             flip=False,
             prop_train=None,
             prop_test=None,
             n_train=None,
             n_test=None,
+            
             overwrite=False, 
+            
             **kwargs
             ):
         
         
-        # if not kwargs.get("filepathList"):
-        #     filepathList = []
+        
         
         ## basic checks        
-        if not imagedir.__class__.__name__ == "list":
-            imagedir = [imagedir]
-        imagedirs = imagedir
-        if not csvpath.__class__.__name__ == "list":
-            csvpath = [csvpath]
-        csvpaths = csvpath
+        if not images.__class__.__name__ == "list":
+            images = [images]
+        if not landmarks.__class__.__name__ == "list":
+            landmarks = [landmarks]
         if not bboxes.__class__.__name__ == "NoneType":
             if not bboxes.__class__.__name__ == "list":
                 bboxes = [bboxes]
-        else: 
-            bboxes =  [None] * len(imagedir)
-        if not len(imagedirs) == len(csvpaths) == len(bboxes):
-            print("imagedir and csvpath have different length")
+        else:
+            bboxes = [None] * len(images)
+        if not parameters.__class__.__name__ == "NoneType":
+            if not parameters.__class__.__name__ == "list":
+                parameters = [parameters]
+        else:
+            parameters = [None] * len(images)
+
+        if not len(images) == len(landmarks) == len(bboxes) == len(parameters):
+            print("ERROR: images, landmarks, bboxes or parameters have different length - aborting.")
             return
                 
         ## parameter checks
@@ -122,58 +130,183 @@ class GenericModel(object):
             "n_train":n_train,
             "n_test":n_test,
             }
-        if parameters.__class__.__name__ == "NoneType":
-            parameters = {}
-        for imagedir in imagedirs:
-            dirname = os.path.basename(imagedir)
-            if not dirname in parameters:
-                parameters[dirname] = {}
+        
+        parameters_updated = []
+        for parameter in parameters:
             for parameter_name, parameter_value in parameter_checks.items():
-                if not parameter_name in parameters[dirname].keys():
-                    parameters[dirname][parameter_name] = parameter_value        
-        
-        
-        ## init xml files
+                if not parameter_name in parameter.keys():
+                    parameter[parameter_name] = parameter_value      
+            parameters_updated.append(parameter)
+            
+        self.parameters = parameters    
+            
+        ## init global xml files
         train_root, train_image_e = utils.init_xml_elements()
         test_root, test_image_e = utils.init_xml_elements()        
-    
+        train_xml = os.path.join(self.xmldir, f"train_{tag}.xml")
+        test_xml = os.path.join(self.xmldir, f"test_{tag}.xml")
+        
+        ## set up random seed
+        random.seed(random_seed)
+
+        
         ## loop over datasets
-        for imagedir, csvpath, bbox in zip(imagedirs, csvpaths, bboxes):
+        for imagepaths, csvpaths, bboxes in zip(imagepathsList, csvpathsList, bboxesList):
+            
+            ## fetch project and set up project specific info
+            dirname = os.path.basename(imagedir)
+            parameter = parameters[project_name]
+            feedback_dict[project_name] = {}
             
             if not os.path.isdir(imagedir):
-                print("Invalid image dir")
+                print('ERROR: "{}" does not exist - aborting.'.format(imagedir))
                 return
             if not os.path.isdir(csvpath):
-                print("Invalid csv path")
+                print('ERROR: "{}" does not exist - aborting'.format(csvpath))
                 return
             
-            
-            dirname = os.path.basename(imagedir)
-            
+            ## dataset specific xml files
+            testSub_root, testSub_image_e = utils.init_xml_elements()        
+            test_xml = os.path.join(self.xmldir, "test_{}_{}.xml".format(dirname, tag))
 
+            for filename in imagedir:
+                
+                ## project specific splits
+                proj_dirpaths_shuffled = copy.deepcopy(self.projects[project_name].dir_paths)
+                random.shuffle(proj_dirpaths_shuffled)
+                n_total = len(proj_dirpaths_shuffled)
+                
+                val_warning_msg = "WARNING - specified amount of training images equal \
+                      or larger than dataset. You need images for validation!"
+                test_warning_msg = "No test images specified - using remaining portion"
+                            
+                if parameter["n_train"]:
+                    if parameter["n_train"] >= n_total:
+                        split = n_total
+                        print(val_warning_msg)
+                    else:
+                        split = parameter["n_train"]
+                    if parameter["n_test"]:
+                        end = parameter["n_train"] + parameter["n_test"]
+                    else:
+                        print(test_warning_msg)
+                        end = n_total
+                    if end > n_total:
+                        end = n_total
+                elif parameter["prop_train"]:
+                    if parameter["prop_train"] == 1:
+                        print(val_warning_msg)
+                    split = int(parameter["prop_train"] * n_total)
+                    if parameter["prop_test"]:
+                        end = split + int(parameter["prop_test"] * n_total)
+                    if end > n_total:
+                        end = n_total
+                elif parameter["split"]:
+                    split = int(parameter["split"] * n_total)
+                    end = n_total
+    
+    
+                for part in ["train","test"]:
+            
+                    if part == "train":
+                        start, stop = 0, split
+                    elif part == "test":
+                        start, stop = split, end
         
-            if not os.path.isfile(self.csvpath):
-                shutil.copyfile(csvpath, self.csvpath)
-                print("- saved a copy of csv file at {}".format(self.csvpath))
-            else:
-                print("- {} does not exist!".format(csvpath))
-                return
-
+                    for idx1, dirpath in enumerate(proj_dirpaths_shuffled[start:stop]):
+                        
+                        image = None
+                
+                        ## load data
+                        attributes = pp_utils_lowlevel._load_yaml(os.path.join(dirpath, "attributes.yaml"))
+                        annotations = pp_core.export.load_annotation(os.path.join(dirpath, "annotations_" + parameter["project_tag"] + ".json"), verbose=False)
+                        filename = attributes["image_original"]["filename"]
+                        filepath = attributes["image_phenopype"]["filepath"]
+                        image_width, image_height= attributes["image_phenopype"]["width"],  attributes["image_phenopype"]["height"]
+    
+                        ## potentially not needed, because img-dirs are on the same level as xml dirs
+                        image_phenopype_path = os.path.abspath(os.path.join(dirpath, attributes["image_phenopype"]["filepath"]))
+                        filepath = os.path.relpath(image_phenopype_path, self.xmldir)
+            
+                        ## feedback
+                        print("Preparing {} data for project {}: {} ({}/{})".format(part, project_name, filename, idx1+1, str(len(proj_dirpaths_shuffled[start:stop]))))       
+            
+                        ## checks and feedback
+                        if annotations.__class__.__name__ == "NoneType":
+                            print("No annotations found for {}".format(filename))
+                            continue
+                        if not annotation_type in annotations:
+                            print("No annotation of type {} found for {}".format(annotation_type, filename))
+                            continue
+                        if annotation_id.__class__.__name__ == "NoneType":
+                            annotation_id = max(list(annotations[annotation_type].keys()))
+            
+                        ## load landmarks
+                        data = annotations[annotation_type][annotation_id]["data"][annotation_type]
+            
+                        ## masking
+                        if parameter["mask"]:
+                            if pp_settings._mask_type in annotations:
+                                pass
+                            else:
+                                print("No annotation of type {} found for {}".format(pp_settings._mask_type, filename))
+                                continue
+                        
+                            ## select last mask if no id is given
+                            if mask_id.__class__.__name__ == "NoneType":
+                                mask_id = max(list(annotations[pp_settings._mask_type].keys()))
+            
+                            ## get bounding rectangle and crop image to mask coords
+                            coords = annotations[pp_settings._mask_type][mask_id]["data"][pp_settings._mask_type][0]
+                            rx, ry, rw, rh = cv2.boundingRect(np.asarray(coords, dtype="int32"))
+                        else:
+                            rx, ry, rw, rh = 1, 1, image_width, image_height 
+                            
+                        ## flipping
+                        if parameter["flip"]:
+                                                    
+                            image = pp_utils.load_image(dirpath)                       
+                            image = cv2.flip(image, 1)
+                            if not rx == 1:
+                                rx = image_width - (rx + rw)
+                                
+                            parameter["mode"] = "save"
+                            
+                            data_new = []
+                            for coord in data:
+                                data_new.append((image_width - coord[0], coord[1]))
+                            data = data_new
+                        
+                        ## saving
+                        if parameter["mode"] == "save":
+                            if image.__class__.__name__ == "NoneType":
+                                image = pp_utils.load_image(dirpath)                       
+                            pp_utils.save_image(image, dir_path=self.imagedir, file_name=filename)
+                            filepath = os.path.relpath(os.path.join(self.imagedir,filename), self.xmldir)
+                            
+                        ## xml part
+                        if part == "train":
+                            train_images_e.append(utils.add_image_element(pp_utils_lowlevel._convert_tup_list_arr(data)[0], (rx, ry, rw, rh), path=filepath))
+                        elif part == "test":
+                            test_global_images_e.append(utils.add_image_element(pp_utils_lowlevel._convert_tup_list_arr(data)[0], (rx, ry, rw, rh), path=filepath))
+                            test_sub_images_e.append(utils.add_image_element(pp_utils_lowlevel._convert_tup_list_arr(data)[0], (rx, ry, rw, rh), path=filepath))
+    
+            
+                
+            
+            
+            
+            
+            
+            
         csv = utils.read_csv(self.csvpath)
-        
-
-            datasets[filepathList], 
-            landmarkList, 
-            bboxList, 
-            percentageList:
 
         #     images_e.append(add_image_element(utils_lowlevel._convert_tup_list_arr(data)[0], (rx, ry, rw, rh), path=filepath))
     
 
         
         train_set, test_set = utils.split_train_test(csv, percentage)
-        train_xml = os.path.join(self.xmldir, f"train_{tag}.xml")
-        test_xml = os.path.join(self.xmldir, f"test_{tag}.xml")
+
 
         if os.path.exists(train_xml) and overwrite is False:
             print(
