@@ -1,3 +1,5 @@
+#%% imports
+
 clean_namespace = dir()
 
 import copy
@@ -21,6 +23,7 @@ from phenopype import utils_lowlevel as pp_utils_lowlevel
 
 from phenomorph import utils
 
+#%% classes 
 
 class GenericModel(object):
     def __init__(
@@ -99,34 +102,55 @@ class GenericModel(object):
             **kwargs
             ):
                 
-        ## check image list  
+        ## check image list          
         if not images.__class__.__name__ == "list":
             images = [images]    
-        imageList, dirList = [], []
-        for image in images:
-            if os.path.isdir(image):
-                imageList.append(os.listdir(image))
-                dirList.append(image)
-            elif image.__class__.__name__ == "list":
-                if all([os.path.isfile(path) for path in image]):
-                    imageList.append(image)
-                    dirList.append("")
-                else:
-                    print('ERROR: could not verify all images in "{}" - aborting.'.format(image))
+        imageList, imagenameList = [], []
+        
+        for idx, item in enumerate(images):
+            imageDict = {}
+                        
+            ## directory case 
+            if os.path.isdir(item):
+                dirpath = item
+                for imagename in os.listdir(dirpath):
+                    imagenameList.append(imagename)
+                    imagepath = os.path.join(dirpath, imagename)
+                    if os.path.isfile(imagepath):
+                        imageDict[imagename] = imagepath
+                    else:
+                        print("WARNING: {} does not exist".format(imagepath))
+                        
+            ## list of paths case
+            elif item.__class__.__name__ == "list":
+                for imagepath in item:
+                    if os.path.isfile(imagepath):
+                        imagename = os.path.basename(imagepath)
+                        imagenameList.append(imagename)
+                        imageDict[imagename] = imagepath
+                    else:
+                        print("WARNING: {} does not exist".format(imagepath))
+                        
+            ## wrong format
             else:
-                print('ERROR: wrong image format supplied - aborting.')
+                print('ERROR: cannot read postion {} from supplied image list - skipping.'.format(idx))
+                continue
+            
+            ## create single dictionary per provded directory or list
+            imageList.append(imageDict)
                 
-        ## check landmark list
+        ## create landmark dict
         if not landmarks.__class__.__name__ == "list":
             landmarks = [landmarks]
-        landmarksList = []
+        landmarksDict = {}
         for idx, landmark in enumerate(landmarks):
             if os.path.isfile(landmark):
                 landmark = utils.read_csv(landmark)
-            if not landmark["im"] == imageList[idx]:
-                print("ERROR: landmarks not matching image names - aborting.")
-            else:
-                landmarksList.append(landmark)
+                for imagename, coords in zip(landmark["im"], landmark["coords"]):
+                    if imagename in imagenameList:
+                        landmarksDict[imagename] = coords
+                    else:
+                        print("WARNING: landmarks not matching image names.")
             
         ## check bounding boxes
         if not bboxes.__class__.__name__ == "NoneType":
@@ -171,21 +195,18 @@ class GenericModel(object):
         ## set up random seed
         random.seed(random_seed)
 
-        ## feedback
-        feedback_dict = {}
-
         ## loop over datasets
         for listIdx, images in enumerate(imageList):
-            
-            # fetch project and set up project specific info
-            feedback_dict[listIdx] = {}
-            
+                        
             ## dataset specific xml files
-            testSub_root  = utils.init_xml_elements()        
+            testSub_root  = utils.init_xml_elements()  
+            
+            ## pull image name keys as list
+            imageNames = list(images)
             
             ## folder specific splits and shuffling
-            random.shuffle(images)
-            n_total = len(images)
+            random.shuffle(imageNames)
+            n_total = len(imageNames)
             val_warning_msg = "WARNING - specified amount of training images equal \
                   or larger than dataset. You need images for validation!"
             test_warning_msg = "No test images specified - using remaining portion"
@@ -193,7 +214,6 @@ class GenericModel(object):
             
             ## pull parameters:
             ## hierarchy: n_train > prop_train > percentage
-            
             parameter = parameters[listIdx]
             
             if parameter["n_train"]:
@@ -228,18 +248,18 @@ class GenericModel(object):
                 elif part == "test":
                     start, stop = split, end
     
-                for idx, filename in enumerate(images[start:stop]):
+                for idx, filename in enumerate(imageNames[start:stop]):
                     
-                    filepath = os.path.join(dirList[listIdx], filename)
+                    filepath = imageList[listIdx][filename]
                     imageWidth, imageHeight = Image.open(filepath).size
 
                     ## feedback
-                    print("Preparing {} data for dataset {}: {} ({}/{})".format(part, listIdx+1, filename, idx+1, str(len(images[start:stop]))))       
+                    print("Preparing {} data for dataset {}: {} ({}/{})".format(part, listIdx+1, filename, idx+1, str(len(imageNames[start:stop]))))       
                     
                     # try:
                     
                     ## get landmarks
-                    coords = landmarksList[listIdx]["coords"][idx]
+                    coords = landmarksDict[filename]
                 
                     ## bounding boxes
                     if not len(bboxesList[listIdx]) == 0:
@@ -276,7 +296,6 @@ class GenericModel(object):
                     #     print("something went wrong for {}".format(filename))
             
                 ## project specific actions after completing loop
-                feedback_dict[listIdx][part] = len(images[start:stop])
                 if part == "test":
                     et = ET.ElementTree(testSub_root)
                     xmlstr = minidom.parseString(ET.tostring(et.getroot())).toprettyxml(indent="   ")
