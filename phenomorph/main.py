@@ -68,15 +68,15 @@ class GenericModel(object):
         if not tag.__class__.__name__ == "NoneType":
             ret = pp_utils_lowlevel._file_walker(self.xmldir, include=[tag], pype_mode=True)[0]
             if len(ret) > 0:
-                print("- found training and test datasets \"test_{}.xml\" and \"train_{}.xml\"".format(tag, tag))
-            configpath = os.path.join(self.configdir, "config_{}.yaml".format(tag))
+                print('- found training and test datasets "test_{}.xml" and "train_{}.xml"'.format(tag, tag))
+            configpath = os.path.join(self.configdir, 'config_{}.yaml'.format(tag))
             if os.path.isfile(configpath):
                 self.configpath = configpath
-                print("- loaded config \"config_{}.yaml\"".format(tag))
-            model_path = os.path.join(self.modeldir, "predictor_{}.dat".format(tag))
+                print('- loaded config "config_{}.yaml"'.format(tag))
+            model_path = os.path.join(self.modeldir, 'predictor_{}.dat'.format(tag))
             if os.path.isfile(model_path):
                 self.model_path = model_path
-                print("- loaded model \"predictor_{}.dat\"".format(tag))
+                print('- loaded model "predictor_{}.dat"'.format(tag))
           
 
     def create_training_data(
@@ -102,6 +102,18 @@ class GenericModel(object):
             **kwargs
             ):
                 
+        ## define flags
+        flags = make_dataclass(
+            cls_name="flags", fields=[
+                ("overwrite", bool, overwrite),
+                ]
+        )
+        
+        ret = pp_utils_lowlevel._file_walker(self.xmldir, include=[tag], pype_mode=True)[0]
+        if len(ret) > 0 and not flags.overwrite:
+            print('Files "test_{}.xml" and "train_{}.xml" already exit (overwrite=False)'.format(tag,tag))
+            return
+        
         ## check image list          
         if not images.__class__.__name__ == "list":
             images = [images]    
@@ -199,7 +211,8 @@ class GenericModel(object):
         for listIdx, images in enumerate(imageList):
                         
             ## dataset specific xml files
-            testSub_root  = utils.init_xml_elements()  
+            if len(imageList) > 1:
+                testSub_root  = utils.init_xml_elements()  
             
             ## pull image name keys as list
             imageNames = list(images)
@@ -254,54 +267,58 @@ class GenericModel(object):
                     imageWidth, imageHeight = Image.open(filepath).size
 
                     ## feedback
-                    print("Preparing {} data for dataset {}: {} ({}/{})".format(part, listIdx+1, filename, idx+1, str(len(imageNames[start:stop]))))       
-                    
-                    # try:
-                    
-                    ## get landmarks
-                    coords = landmarksDict[filename]
-                
-                    ## bounding boxes
-                    if not len(bboxesList[listIdx]) == 0:
-                        rx, ry, rw, rh = bboxesList[listIdx][filename]
+                    if len(imageList) > 1:
+                        print("Preparing {} data for dataset {} - {} ({}/{})".format(part, listIdx+1, filename, idx+1, str(len(imageNames[start:stop]))))     
                     else:
-                        rx, ry, rw, rh = 1, 1, imageWidth , imageHeight
-                                                
-                    ## flipping
-                    if parameter["flip"]:
-                                                                        
-                        image = pp_utils.load_image(filepath)                       
-                        image = cv2.flip(image, 1)
-                        if not rx == 1:
-                            rx = imageWidth - (rx + rw)
+                        print("Preparing {} data for {} ({}/{})".format(part, filename, idx+1, str(len(imageNames[start:stop]))))       
 
-                        coords_new = []
-                        for coord in coords:
-                            coords_new.append((imageWidth - coord[0], coord[1]))
-                        coords = pp_utils_lowlevel._convert_tup_list_arr(coords_new)[0]
-                                     
-                        pp_utils.save_image(image, dir_path=self.imagedir, file_name=filename)
-                        filepath = os.path.relpath(os.path.join(self.imagedir,filename), self.xmldir)
-                        
-                    else:
-                        filepath = os.path.relpath(filepath, self.xmldir)
-
-                    ## xml part
-                    if part == "train":
-                        train_root[2].append(utils.add_image_element(coords, (rx, ry, rw, rh), path=filepath))
-                    elif part == "test":
-                        test_root[2].append(utils.add_image_element(coords, (rx, ry, rw, rh), path=filepath))
-                        testSub_root[2].append(utils.add_image_element(coords, (rx, ry, rw, rh), path=filepath))
-                    # except:
-                    #     print("something went wrong for {}".format(filename))
+                    try:
+                        ## get landmarks
+                        coords = landmarksDict[filename]
+                    
+                        ## bounding boxes
+                        if not len(bboxesList[listIdx]) == 0:
+                            rx, ry, rw, rh = bboxesList[listIdx][filename]
+                        else:
+                            rx, ry, rw, rh = 1, 1, imageWidth , imageHeight
+                                                    
+                        ## flipping
+                        if parameter["flip"]:
+                                                                            
+                            image = pp_utils.load_image(filepath)                       
+                            image = cv2.flip(image, 1)
+                            if not rx == 1:
+                                rx = imageWidth - (rx + rw)
+    
+                            coords_new = []
+                            for coord in coords:
+                                coords_new.append((imageWidth - coord[0], coord[1]))
+                            coords = pp_utils_lowlevel._convert_tup_list_arr(coords_new)[0]
+                                         
+                            pp_utils.save_image(image, dir_path=self.imagedir, file_name=filename)
+                            filepath = os.path.relpath(os.path.join(self.imagedir,filename), self.xmldir)
+                            
+                        else:
+                            filepath = os.path.relpath(filepath, self.xmldir)
+    
+                        ## xml part
+                        if part == "train":
+                            train_root[2].append(utils.add_image_element(coords, (rx, ry, rw, rh), path=filepath))
+                        elif part == "test":
+                            test_root[2].append(utils.add_image_element(coords, (rx, ry, rw, rh), path=filepath))
+                        if len(imageList) > 1:
+                            testSub_root[2].append(utils.add_image_element(coords, (rx, ry, rw, rh), path=filepath))
+                    except:
+                        print("something went wrong for {}".format(filename))
             
                 ## project specific actions after completing loop
-                if part == "test":
-                    et = ET.ElementTree(testSub_root)
-                    xmlstr = minidom.parseString(ET.tostring(et.getroot())).toprettyxml(indent="   ")
-                    with open(os.path.join(self.xmldir, part + "_" + str(listIdx) + "_" + tag + ".xml"), "w") as f:
-                        f.write(xmlstr)
-    
+                if len(imageList) > 1:
+                    if part == "test":
+                        et = ET.ElementTree(testSub_root)
+                        xmlstr = minidom.parseString(ET.tostring(et.getroot())).toprettyxml(indent="   ")
+                        with open(os.path.join(self.xmldir, part + "_" + str(listIdx) + "_" + tag + ".xml"), "w") as f:
+                            f.write(xmlstr)
+        
             ## format final XML output
             for root, part in zip([train_root, test_root],["train","test"]):
                 et = ET.ElementTree(root)
@@ -319,7 +336,13 @@ class GenericModel(object):
             n_train_imgs = utils.xml_element_counter(train_path, "image", images)     
             n_test_imgs = utils.xml_element_counter(test_path, "image")
             
-            print("Prepared train/test datasets for \"{}\" from dataset \"{}\":".format(tag, listIdx))
+            print("\n")
+            
+            if len(imageList) > 1:
+                print("Prepared train/test datasets for \"{}\" from dataset \"{}\":".format(tag, listIdx))
+            else:
+                print("Prepared train/test datasets for \"{}\":".format(tag))
+            print("-----------------------------------------------------------------")
             print("total available: {} images - training: {} images - testing: {} images".format(n_total, n_train_imgs, n_test_imgs))
 
 
@@ -337,9 +360,9 @@ class GenericModel(object):
 
             if not os.path.isfile(self.configpath):
                 shutil.copyfile(configpath, self.configpath)
-                print("- found config file - saved a copy at {}".format(self.configpath))
+                print("Found config file - saved a copy at {}".format(self.configpath))
             else:
-                print("- found config file at {} - loading (overwrite=False)".format(self.configpath))     
+                print("Found config file at {} - loading (overwrite=False)".format(self.configpath))     
                 
                 cfg = pp_utils_lowlevel._load_yaml(configpath)
                 options = dlib.shape_predictor_training_options()
@@ -380,23 +403,42 @@ class GenericModel(object):
             print(f"Training error (average pixel deviation): {error}")
 
     def test_model(self, tag):
-        predictor_path = os.path.join(self.modeldir, f"predictor_{tag}.dat")
-        test_xml = os.path.join(self.rootdir, "xml", f"test_{tag}.xml")
-        assert os.path.exists(
-            predictor_path
-        ), f"Cannot find shape prediction model at {predictor_path}"
-        assert os.path.exists(test_xml), f"Cannot find test xml file at {test_xml}"
-        error = dlib.test_shape_predictor(test_xml, predictor_path)
-        print(f"Testing error (average pixel deviation): {error}")
+                
+        ## assemble test-file list
+        test_global_file, test_sub_files = os.path.join(self.xmldir, "test_{}.xml".format(tag)), []
+        for xml_file in os.listdir(self.xmldir):
+            if all([
+                    "test" in xml_file, 
+                    tag in xml_file,
+                    not xml_file == "test_{}.xml".format(tag)
+                    ]):
+                xml_file_path = os.path.join(self.xmldir, xml_file)
+                test_sub_files.append(xml_file_path)
 
-    def predict_dir(self, tag, dir_path, print_csv=False):
+        
+        predictor_path = os.path.join(self.modeldir, f"predictor_{tag}.dat")
+        
+        if os.path.isfile(predictor_path):
+            error = dlib.test_shape_predictor(test_global_file, predictor_path)
+            if len(test_sub_files) > 1:
+                print("Testing global error (average pixel deviation): {}".format(error))
+                print("-----------------------------------------------------------------")
+                for idx, xml_file_path in enumerate(test_sub_files):
+                    print("Testing error (average pixel deviation) on dataset {}: {}".format(idx+1, error))
+                    error = dlib.test_shape_predictor(xml_file_path, predictor_path)
+            else:
+                print("Testing error (average pixel deviation): {}".format(error))
+        else:
+            print("Cannot find shape prediction model at {}".format(predictor_path))
+        
+    def predict_dir(self, tag, dirpath, print_csv=False):
         predictor_path = os.path.join(self.modeldir, f"predictor_{tag}.dat")
         assert os.path.exists(
             predictor_path
         ), f"Cannot find shape prediction model at {predictor_path}"
-        assert os.path.exists(dir_path), "No image directory found at {dir_path}"
-        output_xml = os.path.join(dir_path, f"predicted_{tag}.xml")
-        utils.predictions_to_xml(predictor_path, dir_path, None, output_xml)
+        assert os.path.exists(dirpath), "No image directory found at {dir_path}"
+        output_xml = os.path.join(dirpath, f"predicted_{tag}.xml")
+        utils.predictions_to_xml(predictor_path, dirpath, None, output_xml)
         df = utils.dlib_xml_to_pandas(output_xml, print_csv)
         os.remove(output_xml)
         return df
