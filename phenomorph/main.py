@@ -24,17 +24,17 @@ from phenopype import utils_lowlevel as pp_utils_lowlevel
 
 from phenomorph import utils
 
-#%% classes 
+#%% classes
 
 class Model(object):
     def __init__(
-            self, 
-            rootdir, 
-            tag=None, 
+            self,
+            rootdir,
+            tag=None,
             overwrite=False
             ):
         """
-        
+
 
         Parameters
         ----------
@@ -50,11 +50,11 @@ class Model(object):
         None.
 
         """
-        
+
         ## init at root
         self.rootdir = os.path.abspath(rootdir)
         print(f"Initialized ml-morph at {self.rootdir}")
-        
+
         ## make other directories if necessary
         self.imagedir = os.path.join(self.rootdir, "images")
         self.modeldir = os.path.join(self.rootdir, "models")
@@ -78,11 +78,11 @@ class Model(object):
             if os.path.isfile(model_path):
                 self.model_path = model_path
                 print('- loaded model "predictor_{}.dat"'.format(tag))
-          
+
 
     def create_training_data(
-            self, 
-            tag, 
+            self,
+            tag,
             images,
             landmarks,
             bboxes=None,
@@ -94,13 +94,13 @@ class Model(object):
             prop_test=None,
             n_train=None,
             n_test=None,
-            overwrite=False, 
+            overwrite=False,
             debug=False,
-            verbose=True, 
+            verbose=True,
             **kwargs
             ):
         """
-        
+
 
         Parameters
         ----------
@@ -142,10 +142,10 @@ class Model(object):
         None.
 
         """
-        
+
         # =============================================================================
-        # setup        
-        
+        # setup
+
         ## define flags
         flags = make_dataclass(
             cls_name="flags", fields=[
@@ -154,16 +154,16 @@ class Model(object):
                 ("verbose", bool, verbose),
                 ]
         )
-        
-        ## check image list          
+
+        ## check image list
         if not images.__class__.__name__ == "list":
-            images = [images]    
-            
+            images = [images]
+
         imageList, imagenameList = [], []
         for idx, item in enumerate(images):
             imageDict = {}
-            
-            ## directory case 
+
+            ## directory case
             if item.__class__.__name__ == "str":
                 if os.path.isdir(item):
                     dirpath = item
@@ -174,7 +174,7 @@ class Model(object):
                             imageDict[imagename] = imagepath
                         else:
                             print("WARNING: {} does not exist".format(imagepath))
-                        
+
             ## list of paths case
             elif item.__class__.__name__ == "list":
                 for imagepath in item:
@@ -184,37 +184,37 @@ class Model(object):
                         imageDict[imagename] = imagepath
                     else:
                         print("WARNING: {} does not exist".format(imagepath))
-                        
+
             ## phenopype project - for overwrite skip
             elif item.__class__.__name__ == "Project":
                 imageDict = copy.deepcopy(item.file_names)
-                        
+
             ## wrong format
             else:
                 print('ERROR: cannot read postion {} from supplied image list - skipping.'.format(idx))
                 continue
-            
+
             ## create single dictionary per provded directory or list
             imageList.append(imageDict)
-            
+
         # =============================================================================
         ## training data overwrite check
-        
+
         ret = pp_utils_lowlevel._file_walker(self.xmldir, include=[tag], pype_mode=True)[0]
         if len(ret) > 0 and not flags.overwrite:
             print('Files "test_{}.xml" and "train_{}.xml" already exist (overwrite=False)'.format(tag,tag))
         else:
-            
+
         # =============================================================================
-                
+
             ## create landmark dict
             if not landmarks.__class__.__name__ == "list":
                 landmarks = [landmarks]
-            
+
             landmarksDict = {}
             for idx, item in enumerate(landmarks):
-                           
-                ## file case 
+
+                ## file case
                 if item.__class__.__name__ == "str":
                     if os.path.isfile(item):
                         landmark = utils.read_csv(item)
@@ -223,7 +223,7 @@ class Model(object):
                                 landmarksDict[imagename] = coords
                             else:
                                 print("WARNING: landmarks not matching image names.")
-                            
+
                 ## dictionary of landmarks case
                 elif item.__class__.__name__ == "dict":
                     for imagename, coords in item.items():
@@ -231,31 +231,31 @@ class Model(object):
                             landmarksDict[imagename] = coords
                         else:
                             print("WARNING: landmarks not matching image names.")
-                            
+
                 ## wrong format
                 else:
                     print('ERROR: cannot read postion {} from supplied landmark list - skipping.'.format(idx))
                     continue
-    
+
             ## check bounding boxes
             if not bboxes.__class__.__name__ == "NoneType":
                 if not bboxes.__class__.__name__ == "list":
                     bboxes = [bboxes]
             else:
                 bboxes = [{}] * len(images)
-            bboxesList = bboxes 
-            
+            bboxesList = bboxes
+
             ## check parameters
             if not parameters.__class__.__name__ == "NoneType":
                 if not parameters.__class__.__name__ == "list":
                     parameters = [parameters]
             else:
                 parameters = [{}] * len(images)
-    
+
             if not len(images) == len(landmarks) == len(bboxes) == len(parameters):
                 print("ERROR: images, landmarks, bboxes or parameters have different lengths - aborting.")
                 return
-                    
+
             ## parameter checks
             parameter_checks = {
                 "percentage": percentage,
@@ -268,40 +268,40 @@ class Model(object):
             for parameter in parameters:
                 for parameter_name, parameter_value in parameter_checks.items():
                     if not parameter_name in parameter.keys():
-                        parameter[parameter_name] = parameter_value      
-    
+                        parameter[parameter_name] = parameter_value
+
             ## init global xml files
             train_root, test_root = utils.init_xml_elements(n=2)
-    
+
             ## set up random seed
             random.seed(random_seed)
-            
-            # =============================================================================
-            # iterate over data       
 
-            
+            # =============================================================================
+            # iterate over data
+
+
             ## loop over datasets
             for listIdx, images in enumerate(imageList):
-                                        
+
                 ## dataset specific xml files
                 if len(imageList) > 1:
-                    testSub_root  = utils.init_xml_elements()  
-                
+                    testSub_root  = utils.init_xml_elements()
+
                 ## pull image name keys as list
                 imageNames = list(images)
-                
+
                 ## folder specific splits and shuffling
                 random.shuffle(imageNames)
                 n_total = len(imageNames)
                 val_warning_msg = "WARNING - specified amount of training images equal \
                       or larger than dataset. You need images for validation!"
                 test_warning_msg = "No test images specified - using remaining portion"
-                           
-                
+
+
                 ## pull parameters:
                 ## hierarchy: n_train > prop_train > percentage
                 parameter = parameters[listIdx]
-                
+
                 if parameter["n_train"]:
                     if parameter["n_train"] >= n_total:
                         split = n_total
@@ -326,55 +326,55 @@ class Model(object):
                 elif parameter["percentage"]:
                     split = int(parameter["percentage"] * n_total)
                     end = n_total
-    
+
                 for part in ["train","test"]:
-            
+
                     if part == "train":
                         start, stop = 0, split
                     elif part == "test":
                         start, stop = split, end
-        
+
                     for idx, filename in enumerate(imageNames[start:stop]):
-                        
+
                         filepath = imageList[listIdx][filename]
                         imageWidth, imageHeight = Image.open(filepath).size
-    
+
                         ## feedback
                         if flags.verbose:
                             if len(imageList) > 1:
-                                print("Preparing {}ing data for dataset {} - {} ({}/{})".format(part, listIdx+1, filename, idx+1, str(len(imageNames[start:stop]))))     
+                                print("Preparing {}ing data for dataset {} - {} ({}/{})".format(part, listIdx+1, filename, idx+1, str(len(imageNames[start:stop]))))
                             else:
-                                print("Preparing {}ing data for {} ({}/{})".format(part, filename, idx+1, str(len(imageNames[start:stop]))))       
-    
+                                print("Preparing {}ing data for {} ({}/{})".format(part, filename, idx+1, str(len(imageNames[start:stop]))))
+
                         try:
                             ## get landmarks
                             coords = landmarksDict[filename]
-                        
+
                             ## bounding boxes
                             if not len(bboxesList[listIdx]) == 0:
                                 rx, ry, rw, rh = bboxesList[listIdx][filename]
                             else:
                                 rx, ry, rw, rh = 1, 1, imageWidth , imageHeight
-                                                        
+
                             ## flipping
                             if parameter["flip"]:
-                                                                                
-                                image = pp_utils.load_image(filepath)                       
+
+                                image = pp_utils.load_image(filepath)
                                 image = cv2.flip(image, 1)
                                 if not rx == 1:
                                     rx = imageWidth - (rx + rw)
-        
+
                                 coords_new = []
                                 for coord in coords:
                                     coords_new.append((imageWidth - coord[0], coord[1]))
                                 coords = pp_utils_lowlevel._convert_tup_list_arr(coords_new)[0]
-                                             
+
                                 pp_utils.save_image(image, dir_path=self.imagedir, file_name=filename)
                                 filepath = os.path.relpath(os.path.join(self.imagedir,filename), self.xmldir)
-                                
+
                             else:
                                 filepath = os.path.relpath(filepath, self.xmldir)
-    
+
                             ## xml part
                             if part == "train":
                                 train_root[2].append(utils.add_image_element(coords, (rx, ry, rw, rh), path=filepath))
@@ -387,7 +387,7 @@ class Model(object):
                                 raise
                             else:
                                 print("something went wrong for {}".format(filename))
-                
+
                     ## project specific actions after completing loop
                     if len(imageList) > 1:
                         if part == "test":
@@ -395,32 +395,32 @@ class Model(object):
                             xmlstr = minidom.parseString(ET.tostring(et.getroot())).toprettyxml(indent="   ")
                             with open(os.path.join(self.xmldir, part + "_" + str(listIdx+1) + "_" + tag + ".xml"), "w") as f:
                                 f.write(xmlstr)
-            
+
                 ## format final XML output
                 for root, part in zip([train_root, test_root],["train","test"]):
                     et = ET.ElementTree(root)
                     xmlstr = minidom.parseString(ET.tostring(et.getroot())).toprettyxml(indent="   ")
                     with open(os.path.join(self.xmldir, part + "_" + tag + ".xml"), "w") as f:
                         f.write(xmlstr)
-                    
+
         # =============================================================================
         # checking saved data
-        
+
         for listIdx, images in enumerate(imageList):
-            
+
             train_path = os.path.join(self.xmldir, "train_{}.xml".format(tag))
             if len(imageList) > 1:
                 test_path = os.path.join(self.xmldir, "test_{}_{}.xml".format(listIdx+1, tag))
             else:
                 test_path = os.path.join(self.xmldir, "test_{}.xml".format(tag))
 
-            
+
             n_total = len(images)
-            n_train_imgs = utils.xml_element_counter(train_path, "image", images)     
+            n_train_imgs = utils.xml_element_counter(train_path, "image", images)
             n_test_imgs = utils.xml_element_counter(test_path, "image")
-            
+
             print("\n")
-            
+
             if len(imageList) > 1:
                 print("Prepared train/test datasets for \"{}\" from dataset \"{}\":".format(tag, listIdx+1))
             else:
@@ -437,7 +437,7 @@ class Model(object):
             verbose=True,
             ):
         """
-        
+
 
         Parameters
         ----------
@@ -466,8 +466,8 @@ class Model(object):
                 shutil.copyfile(configpath, self.configpath)
                 print("Found config file - saved a copy at {}".format(self.configpath))
             else:
-                print("Found config file at {} - loading (overwrite=False)".format(self.configpath))     
-                
+                print("Found config file at {} - loading (overwrite=False)".format(self.configpath))
+
                 cfg = pp_utils_lowlevel._load_yaml(configpath)
                 options = dlib.shape_predictor_training_options()
                 options.num_trees_per_cascade_level = cfg["train"]["num_trees"]
@@ -480,17 +480,17 @@ class Model(object):
                 options.oversampling_amount = cfg["train"]["oversampling"]
                 options.be_verbose = cfg["train"]["verbose"]
                 self.options = options
-    
+
         else:
             print("- {} does not exist!".format(configpath))
 
     def train_model(
-            self, 
-            tag, 
+            self,
+            tag,
             overwrite=False
             ):
         """
-        
+
 
         Parameters
         ----------
@@ -504,7 +504,7 @@ class Model(object):
         None.
 
         """
-        
+
         assert self.options is not None, print(
             "Please load a ml-morph config file first"
         )
@@ -527,12 +527,12 @@ class Model(object):
         print(f"Training error (average pixel deviation): {error}")
 
     def test_model(
-            self, 
+            self,
             tag
             ):
-        
+
         """
-        
+
 
         Parameters
         ----------
@@ -544,21 +544,21 @@ class Model(object):
         None.
 
         """
-        
+
         ## assemble test-file list
         test_global_file, test_sub_files = os.path.join(self.xmldir, "test_{}.xml".format(tag)), []
         for xml_file in os.listdir(self.xmldir):
             if all([
-                    "test" in xml_file, 
+                    "test" in xml_file,
                     tag in xml_file,
                     not xml_file == "test_{}.xml".format(tag)
                     ]):
                 xml_file_path = os.path.join(self.xmldir, xml_file)
                 test_sub_files.append(xml_file_path)
 
-        
+
         predictor_path = os.path.join(self.modeldir, f"predictor_{tag}.dat")
-        
+
         if os.path.isfile(predictor_path):
             error = dlib.test_shape_predictor(test_global_file, predictor_path)
             if len(test_sub_files) > 1:
@@ -571,15 +571,15 @@ class Model(object):
                 print("Testing error (average pixel deviation): {}".format(error))
         else:
             print("Cannot find shape prediction model at {}".format(predictor_path))
-        
+
     def predict_dir(
             self,
-            tag, 
-            dirpath, 
+            tag,
+            dirpath,
             print_csv=False
             ):
         """
-        
+
 
         Parameters
         ----------
@@ -608,15 +608,15 @@ class Model(object):
         return df
 
     def predict_image(
-            self, 
-            tag, 
+            self,
+            tag,
             img,
-            bbox_coords=None, 
-            plot=False, 
+            bbox_coords=None,
+            plot=False,
             colour=None
             ):
         """
-        
+
 
         Parameters
         ----------
@@ -645,7 +645,7 @@ class Model(object):
         if type(img) == str:
             assert os.path.exists(img), "No image found at {image_path}"
             img = pp_utils.load_image(img)
-        elif type(img) == np.ndarray:  
+        elif type(img) == np.ndarray:
             img = copy.deepcopy(img)
         if bbox_coords:
             rx, ry, rw, rh = bbox_coords
@@ -657,7 +657,7 @@ class Model(object):
                 left=1, top=1, right=img.shape[1] - 1, bottom=img.shape[0] - 1
             )
         predictor = dlib.shape_predictor(predictor_path)
-        
+
         ## weird order
         shape = predictor(img, rect)
         num_parts = range(0, shape.num_parts)
@@ -665,39 +665,39 @@ class Model(object):
         for item, idx in enumerate(sorted(num_parts, key=str), 0):
             x, y = shape.part(item).x, shape.part(item).y
             points_dict[idx] = (x,y)
-            
+
         ## fixed order
         landmark_tuple_list = []
-        for key, value in sorted(points_dict.items()): 
+        for key, value in sorted(points_dict.items()):
             landmark_tuple_list.append(value)
-            
+
         ## optional plotting
-        if plot: 
+        if plot:
             if not colour:
                 colour = pp_utils_lowlevel._get_bgr("red")
-            else: 
+            else:
                 colour = pp_utils_lowlevel._get_bgr(colour)
             for idx, coords in enumerate(landmark_tuple_list, 0):
                 cv2.circle(img, coords, pp_utils_lowlevel._auto_point_size(img), colour, -1)
                 cv2.putText(img, str(idx + 1), coords, cv2.FONT_HERSHEY_SIMPLEX, pp_utils_lowlevel._auto_text_width(
                     img), colour, pp_utils_lowlevel._auto_text_size(img), cv2.LINE_AA)
             pp_utils.show_image(img)
-    
+
         return landmark_tuple_list
 
 
 
 class PhenopypeModel(Model):
     def __init__(
-            self, 
+            self,
             rootdir,
-            projects, 
+            projects,
             tag=None,
             overwrite=False,
             **kwargs,
             ):
         """
-        
+
 
         Parameters
         ----------
@@ -719,14 +719,14 @@ class PhenopypeModel(Model):
         None.
 
         """
-        
+
         super().__init__(rootdir, tag, overwrite)
 
         ## list check and attach projects
         self.phenopype_projects = {}
         if not projects.__class__.__name__ == "list":
             projects = [projects]
-                
+
         for project in projects:
             if project.__class__.__name__ == "str":
                 if os.path.isdir(project):
@@ -734,7 +734,7 @@ class PhenopypeModel(Model):
                 else:
                     print("wrong directory path - couldn't find {}".format(project))
                     return
-            project_name = os.path.basename(project.root_dir)    
+            project_name = os.path.basename(project.root_dir)
             self.phenopype_projects[project_name] = project
 
 
@@ -750,10 +750,10 @@ class PhenopypeModel(Model):
             overwrite=False,
             debug=False,
             **kwargs
-            
+
             ):
         """
-        
+
 
         Parameters
         ----------
@@ -779,14 +779,14 @@ class PhenopypeModel(Model):
         """
         # =============================================================================
         # setup
-    
+
         ## define flags
         flags = make_dataclass(
             cls_name="flags", fields=[
                 ("overwrite", bool, overwrite),
                 ("debug", bool, debug),
                 ])
-        
+
         ## check phenopype_parameters type
         if not phenopype_parameters.__class__.__name__ == "NoneType":
             if not phenopype_parameters.__class__.__name__ == "list":
@@ -804,37 +804,37 @@ class PhenopypeModel(Model):
         for parameter in phenopype_parameters:
             for parameter_name, parameter_value in parameter_checks.items():
                 if not parameter_name in parameter.keys():
-                    parameter[parameter_name] = parameter_value      
+                    parameter[parameter_name] = parameter_value
 
-        
+
         # =============================================================================
         # collect data from projects
-        
-        
-        
+
+
+
         ## training data overwrite check
         ret = pp_utils_lowlevel._file_walker(self.xmldir, include=[tag], pype_mode=True)[0]
         if len(ret) > 0 and not flags.overwrite:
             images, landmarks, bboxes = list(self.phenopype_projects.values()), [], []
-        else:    
+        else:
             images, landmarks, bboxes = [], [], []
-            
+
             for projIdx, project_name in enumerate(self.phenopype_projects.keys()):
-                
+
                 project = self.phenopype_projects[project_name]
                 projectImages, projectLandmarks, projectBboxes = [], {}, {}
-                        
+
                 for dirpath in _tqdm(
                         project.dir_paths,
                         "- loading data for project {}:".format(project_name),
                         total=len(project.dir_paths),
                         ):
-    
+
                     try:
                         ## load image metadata and annotations
                         attributes = pp_utils_lowlevel._load_yaml(os.path.join(dirpath, "attributes.yaml"))
                         annotations = pp_core.export.load_annotation(os.path.join(dirpath, "annotations_" + phenopype_parameters[projIdx]["phenopype_tag"] + ".json"), verbose=False)
-        
+
                         ## load image paths
                         filename = attributes["image_phenopype"]["filename"]
                         if attributes["image_phenopype"]["mode"] == "link":
@@ -842,7 +842,7 @@ class PhenopypeModel(Model):
                         else:
                             filepath = attributes["image_phenopype"]["filepath"]
                         projectImages.append(filepath)
-        
+
                         ## load landmarks
                         if not phenopype_parameters[projIdx]["landmark_id"]:
                             annotation_id = pp_utils_lowlevel._get_annotation_id(annotations, pp_settings._landmark_type, verbose=False)
@@ -851,7 +851,7 @@ class PhenopypeModel(Model):
                         annotation = pp_utils_lowlevel._get_annotation2(annotations, pp_settings._landmark_type, annotation_id)
                         coords = annotation["data"][pp_settings._landmark_type]
                         projectLandmarks[filename] = np.asarray(coords, dtype="int32")
-        
+
                         ## load mask
                         if phenopype_parameters[projIdx]["mask"]:
                             ## load landmarks
@@ -862,28 +862,110 @@ class PhenopypeModel(Model):
                             annotation = pp_utils_lowlevel._get_annotation2(annotations, pp_settings._mask_type, annotation_id)
                             coords = annotation["data"][pp_settings._mask_type]
                             projectBboxes[filename] = cv2.boundingRect(np.asarray(coords, dtype="int32"))
-                            
-                        
+
+
                     except:
                         if flags.debug:
                             raise
                         else:
                             print("something went wrong for {}".format(filename))
-    
+
                 ## create lists to pass on to super class
                 images.append(projectImages)
                 landmarks.append(projectLandmarks)
                 bboxes.append(projectBboxes)
-                
+
             # =============================================================================
             # supply data to super
-            
+
         print("\n")
         super().create_training_data(
-            tag=tag, 
-            images=images, 
-            landmarks=landmarks, 
-            bboxes=bboxes, 
+            tag=tag,
+            images=images,
+            landmarks=landmarks,
+            bboxes=bboxes,
             overwrite=overwrite,
             debug=debug,
             **kwargs)
+
+#%% functions
+
+def predict_image(
+        img,
+        model_path,
+        bbox_coords=None,
+        plot=False,
+        colour=None
+        ):
+    """
+
+
+    Parameters
+    ----------
+    tag : TYPE
+        DESCRIPTION.
+    img : TYPE
+        DESCRIPTION.
+    bbox_coords : TYPE, optional
+        DESCRIPTION. The default is None.
+    plot : TYPE, optional
+        DESCRIPTION. The default is False.
+    colour : TYPE, optional
+        DESCRIPTION. The default is None.
+
+    Returns
+    -------
+    landmark_tuple_list : TYPE
+        DESCRIPTION.
+
+    """
+
+    predictor_path = model_path
+
+    print("using model: {}".format(predictor_path))
+    assert os.path.exists(
+        predictor_path
+    ), f"Cannot find shape prediction model at {predictor_path}"
+    if type(img) == str:
+        assert os.path.exists(img), "No image found at {image_path}"
+        img = pp_utils.load_image(img)
+    elif type(img) == np.ndarray:
+        img = copy.deepcopy(img)
+    if bbox_coords:
+        rx, ry, rw, rh = bbox_coords
+        rect = dlib.rectangle(
+            left=rx, top=ry, right=rx+rw, bottom=ry+rh
+        )
+    else:
+        rect = dlib.rectangle(
+            left=1, top=1, right=img.shape[1] - 1, bottom=img.shape[0] - 1
+        )
+    predictor = dlib.shape_predictor(predictor_path)
+
+    ## weird order
+    shape = predictor(img, rect)
+    num_parts = range(0, shape.num_parts)
+    points_dict = {}
+    for item, idx in enumerate(sorted(num_parts, key=str), 0):
+        x, y = shape.part(item).x, shape.part(item).y
+        points_dict[idx] = (x,y)
+
+    ## fixed order
+    landmark_tuple_list = []
+    for key, value in sorted(points_dict.items()):
+        landmark_tuple_list.append(value)
+
+    ## optional plotting
+    if plot:
+        if not colour:
+            colour = pp_utils_lowlevel._get_bgr("red")
+        else:
+            colour = pp_utils_lowlevel._get_bgr(colour)
+        for idx, coords in enumerate(landmark_tuple_list, 0):
+            cv2.circle(img, coords, pp_utils_lowlevel._auto_point_size(img), colour, -1)
+            cv2.putText(img, str(idx + 1), coords, cv2.FONT_HERSHEY_SIMPLEX, pp_utils_lowlevel._auto_text_width(
+                img), colour, pp_utils_lowlevel._auto_text_size(img), cv2.LINE_AA)
+        pp_utils.show_image(img)
+
+    return landmark_tuple_list
+    
